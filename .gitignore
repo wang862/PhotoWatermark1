@@ -1,0 +1,55 @@
+# 可执行文件
+*.exe
+*.out
+*.app
+
+# 中间文件
+*.obj
+*.o
+*.class
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# 日志文件
+*.log
+
+# IDE/编辑器文件
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 构建目录
+build/
+bin/
+obj/
+
+# 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# 编译产物
+*.lib
+*.dll
+*.exp
+*.pdb

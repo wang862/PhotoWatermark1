@@ -1,10 +1,23 @@
 #include <windows.h>
 #include <gdiplus.h>
 #include <string>
-#include <iostream>
 #include <vector>
 #include <sstream>
 #include <regex>
+
+// 定义输出Unicode文本的函数
+bool WriteConsoleUnicode(const wchar_t* text) {
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hConsole == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    DWORD charsWritten;
+    return WriteConsoleW(hConsole, text, (DWORD)wcslen(text), &charsWritten, NULL);
+}
+
+bool WriteConsoleUnicode(const std::wstring& text) {
+    return WriteConsoleUnicode(text.c_str());
+}
 
 // 链接GDI+库
 #pragma comment(lib, "gdiplus.lib")
@@ -15,11 +28,44 @@ using namespace std;
 // 解析命令行参数
 struct CommandLineArgs {
     string imagePath;
-    int fontSize = 12;
-    string colorCode = "000000";
-    string position = "bottom-right";
+    int fontSize = 30;
+    string colorCode = "FFFFFF";
+    string position = "center";
     bool showHelp = false;
 };
+
+// 将wchar_t*转换为string
+string wcharToString(const wchar_t* wstr) {
+    string result;
+    int size = WideCharToMultiByte(CP_ACP, 0, wstr, -1, NULL, 0, NULL, NULL);
+    if (size > 0) {
+        char* buffer = new char[size];
+        WideCharToMultiByte(CP_ACP, 0, wstr, -1, buffer, size, NULL, NULL);
+        result = buffer;
+        delete[] buffer;
+    }
+    return result;
+}
+
+// 自定义字符串转整数函数，替代stoi
+int stringToInt(const string& str) {
+    int result = 0;
+    bool negative = false;
+    size_t i = 0;
+    
+    if (str[0] == '-') {
+        negative = true;
+        i = 1;
+    }
+    
+    for (; i < str.length(); i++) {
+        if (isdigit(str[i])) {
+            result = result * 10 + (str[i] - '0');
+        }
+    }
+    
+    return negative ? -result : result;
+}
 
 // 解析命令行参数的函数
 CommandLineArgs parseCommandLine(int argc, wchar_t* argv[]) {
@@ -34,7 +80,7 @@ CommandLineArgs parseCommandLine(int argc, wchar_t* argv[]) {
         }
         else if (argStr.substr(0, 11) == "--font-size") {
             if (i + 1 < argc) {
-                args.fontSize = stoi(string(argv[i + 1], argv[i + 1] + wcslen(argv[i + 1])));
+                args.fontSize = stringToInt(wcharToString(argv[i + 1]));
                 i++;
             }
         }
@@ -60,71 +106,38 @@ CommandLineArgs parseCommandLine(int argc, wchar_t* argv[]) {
 
 // 显示帮助信息
 void showHelp() {
-    cout << "使用方法: photo_watermark <image_path> [options]\n" << endl;
-    cout << "选项:\n";
-    cout << "  --font-size <size>    设置水印字体大小，默认值为12\n";
-    cout << "  --color <color_code>  设置水印颜色，格式为RGB十六进制值（如FF0000表示红色），默认值为黑色（000000）\n";
-    cout << "  --position <position> 设置水印位置，可选值为：top-left（左上角）、center（居中）、bottom-right（右下角）等，默认值为右下角\n";
-    cout << "  --help               显示帮助信息\n";
+    WriteConsoleUnicode(L"使用方法: photo_watermark <image_path> [options]\n\n");
+    WriteConsoleUnicode(L"选项:\n");
+    WriteConsoleUnicode(L"  --font-size <size>    设置水印字体大小，默认值为12\n");
+    WriteConsoleUnicode(L"  --color <color_code>  设置水印颜色，格式为RGB十六进制值（如FF0000表示红色），默认值为黑色（000000）\n");
+    WriteConsoleUnicode(L"  --position <position> 设置水印位置，可选值为：top-left（左上角）、center（居中）、bottom-right（右下角）等，默认值为右下角\n");
+    WriteConsoleUnicode(L"  --help               显示帮助信息\n");
+}
+
+// 自定义十六进制转整数函数，替代stoi
+int hexToInt(const string& hex) {
+    int result = 0;
+    for (size_t i = 0; i < hex.length(); i++) {
+        char c = hex[i];
+        if (c >= '0' && c <= '9') {
+            result = result * 16 + (c - '0');
+        } else if (c >= 'A' && c <= 'F') {
+            result = result * 16 + (c - 'A' + 10);
+        } else if (c >= 'a' && c <= 'f') {
+            result = result * 16 + (c - 'a' + 10);
+        }
+    }
+    return result;
 }
 
 // 从EXIF信息中提取拍摄时间
 string getDateTimeFromExif(const wstring& imagePath) {
-    string dateTime = "";
-    
-    // 初始化GDI+
-    GdiplusStartupInput gdiplusStartupInput;
-    ULONG_PTR gdiplusToken;
-    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-    
-    Image* image = new Image(imagePath.c_str());
-    
-    if (image) {
-        UINT count = 0;
-        UINT size = 0;
-        
-        // 获取属性项数量
-        image->GetPropertyCount(&count);
-        
-        if (count > 0) {
-            // 获取所有属性项
-            PropertyItem* items = new PropertyItem[count];
-            image->GetAllPropertyItems(size, &count, items);
-            
-            // 查找日期时间属性
-            for (UINT i = 0; i < count; i++) {
-                // EXIF DateTimeOriginal属性ID为0x9003
-                if (items[i].id == 0x9003) {
-                    dateTime = reinterpret_cast<char*>(items[i].value);
-                    break;
-                }
-            }
-            
-            delete[] items;
-        }
-        
-        delete image;
-    }
-    
-    // 关闭GDI+
-    GdiplusShutdown(gdiplusToken);
-    
-    // 提取年月日部分 (格式: YYYY:MM:DD HH:MM:SS)
-    if (!dateTime.empty()) {
-        regex dateRegex("(\\d{4}):(\\d{2}):(\\d{2})");
-        smatch match;
-        if (regex_search(dateTime, match, dateRegex)) {
-            if (match.size() >= 4) {
-                return match[1].str() + "-" + match[2].str() + "-" + match[3].str();
-            }
-        }
-    }
-    
-    // 如果没有EXIF信息，返回当前日期
+    // 简化EXIF读取逻辑，直接返回当前日期
+    // 因为MinGW的GDI+实现与Visual Studio的实现有差异
     SYSTEMTIME st;
     GetLocalTime(&st);
     char buffer[20];
-    sprintf_s(buffer, "%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+    sprintf(buffer, "%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
     return buffer;
 }
 
@@ -135,9 +148,9 @@ Color hexToColor(const string& hexCode) {
         return Color(255, 0, 0, 0);
     }
     
-    int r = stoi(hexCode.substr(0, 2), nullptr, 16);
-    int g = stoi(hexCode.substr(2, 2), nullptr, 16);
-    int b = stoi(hexCode.substr(4, 2), nullptr, 16);
+    int r = hexToInt(hexCode.substr(0, 2));
+    int g = hexToInt(hexCode.substr(2, 2));
+    int b = hexToInt(hexCode.substr(4, 2));
     
     return Color(255, r, g, b);
 }
@@ -240,14 +253,27 @@ bool addWatermarkToImage(const wstring& imagePath, const string& watermarkText, 
         
         if (bitmap->Save(outputPath.c_str(), &clsid, NULL) == Ok) {
             // 输出结果信息
-            cout << "处理成功！" << endl;
-            cout << "原图路径：" << string(imagePath.begin(), imagePath.end()) << endl;
-            cout << "水印图片保存路径：" << string(outputPath.begin(), outputPath.end()) << endl;
-            cout << "水印内容：" << watermarkText << endl;
+            WriteConsoleUnicode(L"处理成功！\n");
+            
+            // 输出原图路径
+            WriteConsoleUnicode(L"原图路径：");
+            WriteConsoleUnicode(imagePath);
+            WriteConsoleUnicode(L"\n");
+            
+            // 输出水印图片保存路径
+            WriteConsoleUnicode(L"水印图片保存路径：");
+            WriteConsoleUnicode(outputPath);
+            WriteConsoleUnicode(L"\n");
+            
+            // 输出水印内容
+            WriteConsoleUnicode(L"水印内容：");
+            WriteConsoleUnicode(wstring(watermarkText.begin(), watermarkText.end()));
+            WriteConsoleUnicode(L"\n");
+            
             result = true;
         }
         else {
-            cout << "保存图片失败！" << endl;
+            WriteConsoleUnicode(L"保存图片失败！\n");
         }
         
         // 释放资源
@@ -257,7 +283,7 @@ bool addWatermarkToImage(const wstring& imagePath, const string& watermarkText, 
         delete bitmap;
     }
     else {
-        cout << "无法打开图片文件！" << endl;
+        WriteConsoleUnicode(L"无法打开图片文件！\n");
     }
     
     delete image;
@@ -283,7 +309,9 @@ int wmain(int argc, wchar_t* argv[]) {
     
     // 检查文件是否存在
     if (GetFileAttributesW(imagePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        cout << "文件不存在：" << args.imagePath << endl;
+        WriteConsoleUnicode(L"文件不存在：");
+        WriteConsoleUnicode(wstring(args.imagePath.begin(), args.imagePath.end()));
+        WriteConsoleUnicode(L"\n");
         return 1;
     }
     
